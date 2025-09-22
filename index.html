@@ -7,130 +7,146 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
-    body{margin:0;overflow:hidden;background:#fff;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;padding:40px 16px;}
-    .chart-wrapper{background:transparent;border-radius:0;box-shadow:none;padding:0;}
-    h1{margin:0 0 14px;text-align:center;font-size:22px;font-weight:600;color:#0b0f19;}
-    .legend-note{margin:2px 0 12px;text-align:center;color:#64748b;font-size:13px;}
-    canvas{width:100% !important;height:auto !important;}
+    :root{
+      --ink:#0b0f19;
+      --sub:#64748b;
+      --grid:rgba(2,6,23,0.06);
+      --trve:#5a52ff;
+      --market:#334155;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;background:#fff;color:var(--ink);
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      display:flex;justify-content:center;padding:40px 16px;
+    }
+    .wrap{width:100%;max-width:1100px}
+    h1{margin:0 0 6px;text-align:center;font-size:28px;line-height:1.2;font-weight:700;letter-spacing:-0.01em}
+    .sub{margin:0 0 20px;text-align:center;color:var(--sub);font-size:14px}
+    .card{background:#fff;border-radius:18px;box-shadow:0 4px 18px rgba(2,6,23,0.06);padding:18px 14px}
+    canvas{width:100% !important;height:auto !important;display:block}
+    @media (min-width:900px){ h1{font-size:32px} .card{padding:22px 18px} }
   </style>
 </head>
 <body>
-  <div class="chart-wrapper">
+  <div class="wrap">
     <h1>Évolution du prix du kWh — TRVE (Base) vs Moyenne marché</h1>
-    <div class="legend-note">Profil particulier • Base 6 kVA • Unités : €/kWh <strong>TTC</strong></div>
-    <canvas id="chart"></canvas>
+    <p class="sub">Profil particulier • Base 6 kVA • Unités : €/kWh <strong>TTC</strong></p>
+    <div class="card"><canvas id="chart"></canvas></div>
   </div>
 
   <script>
     // Sources
-    const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json"; // on prend UNIQUEMENT AVG (BASE)
+    const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json";
     const competitorsUrl = "https://raw.githubusercontent.com/feppn/competitors-base-kwh-graph/main/data_competitors.json";
 
     // Helpers
     const ymKey = d => {
-      const dt = new Date(d);
-      return dt.getFullYear() + "-" + String(dt.getMonth()+1).padStart(2,"0");
+      const dt = new Date(d); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0");
     };
     const ymToLabel = key => {
-      const [y,m] = key.split("-");
-      return new Date(Number(y), Number(m)-1, 1).toLocaleDateString("fr-FR",{year:"numeric",month:"2-digit"});
+      const [y,m]=key.split("-"); return new Date(Number(y),Number(m)-1,1).toLocaleDateString("fr-FR",{year:"numeric",month:"2-digit"});
     };
 
     Promise.all([
-      fetch(trveUrl + "?v=" + Date.now(), {cache:"no-store"}).then(r=>r.json()),
-      fetch(competitorsUrl + "?v=" + Date.now(), {cache:"no-store"}).then(r=>r.json())
+      fetch(trveUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json()),
+      fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json())
     ])
     .then(([trveRows, compRows]) => {
-      // ---- TRVE (BASE uniquement) : on lit UNIQUEMENT r.AVG, on ignore Forecast2026 ----
-      const trveIdx = {};
-      trveRows
-        .filter(r => r.Date && typeof r.AVG === "number")   // BASE uniquement
-        .forEach(r => { trveIdx[ymKey(r.Date)] = r.AVG; });
+      // TRVE : on ne garde que BASE (AVG)
+      const trveIdx={};
+      trveRows.filter(r=>r.Date && typeof r.AVG==="number").forEach(r=>{ trveIdx[ymKey(r.Date)]=r.AVG; });
 
-      // ---- Concurrents : tout le fichier, valeurs numérisées même si string ----
-      const compIdx = {};
-      (compRows || []).forEach(r => {
-        const v = (typeof r.CompetitorAVG === "number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",","."));
-        if (!Number.isNaN(v)) compIdx[ymKey(r.Date)] = v;
+      // Concurrents
+      const compIdx={};
+      (compRows||[]).forEach(r=>{
+        const v = (typeof r.CompetitorAVG==="number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",",".")); 
+        if(!Number.isNaN(v)) compIdx[ymKey(r.Date)]=v;
       });
 
-      // ---- Union des mois (toutes les dates présentes dans l’un OU l’autre) ----
-      const monthsSet = new Set([...Object.keys(trveIdx), ...Object.keys(compIdx)]);
-      const months = Array.from(monthsSet).sort(); // "YYYY-MM" triés
-      const labels = months.map(ymToLabel);
-
-      // Séries alignées
+      // Union des mois
+      const months = Array.from(new Set([...Object.keys(trveIdx),...Object.keys(compIdx)])).sort();
+      const labels   = months.map(ymToLabel);
       const trveVals = months.map(k => (k in trveIdx ? trveIdx[k] : null));
       const compVals = months.map(k => (k in compIdx ? compIdx[k] : null));
 
-      // Chart
       const ctx = document.getElementById("chart").getContext("2d");
 
-      const gTrve = ctx.createLinearGradient(0,0,0,300);
-      gTrve.addColorStop(0,"rgba(90, 82, 255, 0.22)");
-      gTrve.addColorStop(1,"rgba(90, 82, 255, 0.00)");
-
-      const gComp = ctx.createLinearGradient(0,0,0,300);
-      gComp.addColorStop(0,"rgba(51,65,85,0.15)");
-      gComp.addColorStop(1,"rgba(51,65,85,0.00)");
+      // Dégradés
+      const gTrve = ctx.createLinearGradient(0,0,0,320);
+      gTrve.addColorStop(0,"rgba(90,82,255,0.25)");
+      gTrve.addColorStop(1,"rgba(90,82,255,0.00)");
 
       new Chart(ctx, {
-        type: 'line',
+        type: "line",
         data: {
           labels,
           datasets: [
+            // TRVE : escalier + aplat violet
             {
               label: "TRVE – Tarif réglementé (Base 6 kVA)",
               data: trveVals,
-              borderColor: "#5a52ff",
+              borderColor: getComputedStyle(document.documentElement).getPropertyValue('--trve').trim(),
               backgroundColor: gTrve,
-              borderWidth: 1.6,
+              borderWidth: 2,
               pointRadius: 0,
               spanGaps: true,
               stepped: "before",
               tension: 0,
-              fill: true
+              fill: true,
+              borderCapStyle: "round",
+              borderJoinStyle: "round"
             },
+            // Marché : ligne grise, fine, dash, légère tension (plus élégant)
             {
               label: "Prix moyen marché (Engie / TotalEnergies / Plénitude)",
               data: compVals,
-              borderColor: "#334155",
-              backgroundColor: gComp,
-              borderWidth: 1.6,
+              borderColor: getComputedStyle(document.documentElement).getPropertyValue('--market').trim(),
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              borderDash: [6,4],
               pointRadius: 0,
               spanGaps: true,
-              stepped: "before",
-              tension: 0,
-              fill: true
+              stepped: false,      // pas en escalier pour différencier visuellement
+              tension: 0.25,       // léger lissage
+              fill: false,
+              borderCapStyle: "round",
+              borderJoinStyle: "round"
             }
           ]
         },
         options: {
-          responsive: true,
-          interaction: { mode: 'nearest', intersect: false },
+          maintainAspectRatio: true,
+          aspectRatio: 2.1,         // plus d'air vertical
+          layout: { padding: { top: 6, right: 10, bottom: 0, left: 0 } },
+          interaction: { mode: "index", intersect: false },
           plugins: {
             legend: {
               position: "bottom",
-              labels: { color: "#1f2937", font: { size: 13, weight: "600" } }
+              labels: { color: "#1f2937", boxWidth: 16, usePointStyle: true, pointStyle: "line", font: { size: 13, weight: "600" } }
             },
             tooltip: {
               backgroundColor:"#fff", borderColor:"#e5e7eb", borderWidth:1,
-              titleColor:"#111827", bodyColor:"#4b5563",
+              titleColor:"#0b0f19", bodyColor:"#334155",
               titleFont:{ weight:'700' }, bodyFont:{ weight:'500' },
               padding:10, cornerRadius:10,
               callbacks: {
-                label: (ctx) => `${ctx.dataset.label} : ${typeof ctx.parsed.y==="number" ? ctx.parsed.y.toFixed(4)+" € / kWh TTC" : "—"}`
+                label: (ctx) => {
+                  const y = ctx.parsed.y;
+                  return `${ctx.dataset.label} : ${typeof y==="number" ? y.toFixed(4)+" € / kWh TTC" : "—"}`;
+                }
               }
             }
           },
           scales: {
             y: {
+              grace: "5%",
               ticks: { color:"#6b7280", callback: v => `${Number(v).toFixed(3)} €` },
-              grid: { color:"rgba(0,0,0,0.06)" },
+              grid: { color:"var(--grid)" },
               border: { display:false }
             },
             x: {
-              offset : true,
+              offset:true,
               ticks: { color:"#6b7280", maxRotation:0, autoSkip:true, maxTicksLimit:12 },
               grid: { display:false },
               border: { display:false }
@@ -139,12 +155,10 @@
         }
       });
     })
-    .catch(err => {
+    .catch(err=>{
       console.error(err);
-      document.querySelector(".chart-wrapper").insertAdjacentHTML(
-        "beforeend",
-        `<p style="margin-top:10px;color:#ef4444;text-align:center">Erreur de chargement des données.</p>`
-      );
+      document.querySelector(".card").insertAdjacentHTML("beforeend",
+        `<p style="margin-top:10px;color:#ef4444;text-align:center">Erreur de chargement des données.</p>`);
     });
   </script>
 </body>
