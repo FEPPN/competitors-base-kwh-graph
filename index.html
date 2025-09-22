@@ -35,17 +35,22 @@
     .then(([trveRows, compRows])=>{
       // TRVE: on prend uniquement AVG (BASE)
       const trveIdx = {};
-      trveRows.filter(r=>r.Date && typeof r.AVG==="number").forEach(r=>{ trveIdx[ymKey(r.Date)] = r.AVG; });
+      (trveRows||[])
+        .filter(r=>r.Date && typeof r.AVG==="number")
+        .forEach(r=>{ trveIdx[ymKey(r.Date)] = r.AVG; });
 
-      // Concurrents: tout le fichier
+      // Concurrents: tout le fichier (convertit string -> number si besoin)
       const compIdx = {};
       (compRows||[]).forEach(r=>{
-        const v = (typeof r.CompetitorAVG==="number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",",".")); 
-        if(!Number.isNaN(v)) compIdx[ymKey(r.Date)] = v;
+        const v = (typeof r.CompetitorAVG==="number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",","."));
+        if(!Number.isNaN(v) && r.Date) compIdx[ymKey(r.Date)] = v;
       });
 
-      // Union des mois pour tout afficher
-      const months = Array.from(new Set([...Object.keys(trveIdx),...Object.keys(compIdx)])).sort();
+      // Union des mois pour tout afficher puis filtre >= juillet 2024
+      let months = Array.from(new Set([...Object.keys(trveIdx), ...Object.keys(compIdx)])).sort();
+      const START_AT = "2024-07"; // YYYY-MM
+      months = months.filter(k => k >= START_AT);
+
       const labels   = months.map(ymToLabel);
       const trveVals = months.map(k => (k in trveIdx ? trveIdx[k] : null));
       const compVals = months.map(k => (k in compIdx ? compIdx[k] : null));
@@ -69,11 +74,10 @@
               borderWidth:1.6,
               pointRadius:0,
               spanGaps:true,
-              stepped:"before",
+              stepped:"before",   // ← rend la courbe en escalier
               tension:0,
               fill:true
             },
-            // <<< courbe concurrents : fine, grise, pointillés, non-steppée, sans fill
             {
               label:"Prix moyen marché (Engie / TotalEnergies / Plénitude)",
               data: compVals,
@@ -122,3 +126,4 @@
   </script>
 </body>
 </html>
+
