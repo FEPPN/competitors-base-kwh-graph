@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Comparatif TRVE vs Prix moyen concurrents – Base 6 kVA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body{
+      margin:0;
+      overflow:hidden;
+      background:#fff;
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      display:flex;
+      justify-content:center;
+      padding:40px 16px;
+    }
+    .chart-wrapper{
+      background:transparent;
+      border-radius:0;
+      box-shadow:none;
+      padding:0;
+    }
+    h1{
+      margin:0 0 14px;
+      text-align:center;
+      font-size:22px;
+      font-weight:600;
+      color:#0b0f19;
+    }
+    .legend-note{
+      margin:2px 0 12px;
+      text-align:center;
+      color:#64748b;
+      font-size:13px;
+    }
+    canvas{width:100% !important;height:auto !important;}
+  </style>
+</head>
+<body>
+  <div class="chart-wrapper">
+    <h1>Évolution du prix du kWh – TRVE vs Moyenne marché (Base 6 kVA)</h1>
+    <div class="legend-note">Unités : €/kWh <strong>TTC</strong></div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script>
+    // URLs des deux jeux de données
+    const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json";
+    const competitorsUrl = "https://raw.githubusercontent.com/OWNER/competitors-base-kwh-graph/main/data_competitors.json";
+
+    const fmtDate = iso => {
+      try { return new Date(iso).toLocaleDateString('fr-FR',{year:'numeric',month:'2-digit'}); }
+      catch { return String(iso ?? ""); }
+    };
+
+    Promise.all([
+      fetch(trveUrl + "?v=" + Date.now()).then(r => r.json()),
+      fetch(competitorsUrl + "?v=" + Date.now()).then(r => r.json())
+    ])
+    .then(([trveRows, compRows]) => {
+
+      // TRVE : on garde uniquement les points où AVG est défini
+      const trveClean = trveRows
+        .filter(r => r.Date && r.AVG != null)
+        .sort((a,b) => new Date(a.Date) - new Date(b.Date));
+
+      const labels   = trveClean.map(r => fmtDate(r.Date));
+      const trveVals = trveClean.map(r => (typeof r.AVG === "number" ? r.AVG : null));
+
+      // Index compétiteurs {YYYY-MM : valeur}
+      const compIdx = {};
+      compRows.forEach(r => {
+        const d = new Date(r.Date);
+        const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0');
+        compIdx[key] = r.CompetitorAVG;
+      });
+
+      // Aligne les valeurs concurrents sur les mêmes mois que TRVE
+      const compVals = trveClean.map(r => {
+        const d = new Date(r.Date);
+        const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0');
+        return compIdx[key] ?? null;
+      });
+
+      const ctx = document.getElementById("chart").getContext("2d");
+
+      // dégradés
+      const gTrve = ctx.createLinearGradient(0,0,0,300);
+      gTrve.addColorStop(0,"rgba(90, 82, 255, 0.22)");
+      gTrve.addColorStop(1,"rgba(90, 82, 255, 0.00)");
+
+      const gComp = ctx.createLinearGradient(0,0,0,300);
+      gComp.addColorStop(0,"rgba(51,65,85,0.15)");
+      gComp.addColorStop(1,"rgba(51,65,85,0.00)");
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "TRVE – Tarif réglementé (Base 6 kVA)",
+              data: trveVals,
+              borderColor: "#5a52ff",
+              backgroundColor: gTrve,
+              borderWidth: 1.6,
+              pointRadius: 0,
+              spanGaps: true,
+              stepped: "before",
+              tension: 0,
+              fill: true
+            },
+            {
+              label: "Prix moyen marché (Engie / TotalEnergies / Plénitude)",
+              data: compVals,
+              borderColor: "#334155",
+              backgroundColor: gComp,
+              borderWidth: 1.6,
+              pointRadius: 0,
+              spanGaps: true,
+              stepped: "before",
+              tension: 0,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: "#1f2937", font: { size: 13, weight: "600" } }
+            },
+            tooltip: {
+              backgroundColor:"#fff", borderColor:"#e5e7eb", borderWidth:1,
+              titleColor:"#111827", bodyColor:"#4b5563",
+              titleFont:{ weight:'700' }, bodyFont:{ weight:'500' },
+              padding:10, cornerRadius:10,
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label} : ${ctx.parsed.y?.toFixed(4)} € / kWh TTC`
+              }
+            }
+          },
+          scales: {
+            y: {
+              ticks: { color:"#6b7280", callback: v => `${Number(v).toFixed(3)} €` },
+              grid: { color:"rgba(0,0,0,0.06)" },
+              border: { display:false }
+            },
+            x: {
+              offset : true,
+              ticks: { color:"#6b7280", maxRotation:0, autoSkip:true, maxTicksLimit:12 },
+              grid: { display:false },
+              border: { display:false }
+            }
+          }
+        }
+      });
+    })
+    .catch(err => {
+      console.error(err);
+      document.querySelector(".chart-wrapper").insertAdjacentHTML(
+        "beforeend",
+        `<p style="margin-top:10px;color:#ef4444;text-align:center">Erreur de chargement des données.</p>`
+      );
+    });
+  </script>
+</body>
+</html>
