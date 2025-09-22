@@ -48,7 +48,7 @@
 
       // Union des mois pour tout afficher puis filtre >= juillet 2024
       let months = Array.from(new Set([...Object.keys(trveIdx), ...Object.keys(compIdx)])).sort();
-      const START_AT = "2024-07"; // YYYY-MM
+      const START_AT = "2024-01"; // YYYY-MM
       months = months.filter(k => k >= START_AT);
 
       const labels   = months.map(ymToLabel);
