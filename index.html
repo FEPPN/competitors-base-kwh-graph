@@ -112,7 +112,7 @@
             }
           },
           scales:{
-            y:{ ticks:{ color:"#6b7280", callback:v=>`${Number(v).toFixed(3)} €` }, grid:{ color:"rgba(0,0,0,0.06)" }, border:{ display:false } },
+            y:{ beginAtZero:true,ticks:{ color:"#6b7280", callback:v=>`${Number(v).toFixed(3)} €` }, grid:{ color:"rgba(0,0,0,0.06)" }, border:{ display:false } },
             x:{ offset:true, ticks:{ color:"#6b7280", maxRotation:0, autoSkip:true, maxTicksLimit:12 }, grid:{ display:false }, border:{ display:false } }
           }
         }
