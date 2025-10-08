@@ -50,28 +50,33 @@
       fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json())
     ])
     .then(([trveRows, compRows])=>{
-      // Index TRVE: prendre BASE si dispo, sinon AVG
-      const trveIdx = {};
-      (trveRows||[])
+      // --- TRVE : points ponctuels -> série mensuelle (carry-forward) ---
+      const trvePoints = (trveRows || [])
         .filter(r => r.Date && (typeof r.BASE === "number" || typeof r.AVG === "number"))
-        .forEach(r => {
-          const val = (typeof r.BASE === "number") ? r.BASE : r.AVG;
-          trveIdx[ymKey(r.Date)] = val;
-        });
+        .map(r => [ymKey(r.Date), (typeof r.BASE === "number") ? r.BASE : r.AVG])
+        .sort((a,b) => a[0].localeCompare(b[0]));
 
-      // Index concurrents
+      const months = monthRange(START_AT, END_AT);
+
+      // Dernière valeur connue <= mois k
+      const valueAtMonth = (k) => {
+        let last = null;
+        for (const [kk, vv] of trvePoints) {
+          if (kk <= k) last = vv; else break;
+        }
+        return last;
+      };
+
+      const labels   = months.map(ymToLabel);
+      const trveVals = months.map(valueAtMonth);
+
+      // --- Concurrents : alignés sur les mêmes months ---
       const compIdx = {};
       (compRows||[]).forEach(r=>{
         const v = (typeof r.CompetitorAVG==="number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",","."));
         if(!Number.isNaN(v) && r.Date) compIdx[ymKey(r.Date)] = v;
       });
-
-      // On force les mois affichés = tous les mois de START_AT à END_AT
-      const months = monthRange(START_AT, END_AT);
-
-      const labels   = months.map(ymToLabel);
-      const trveVals = months.map(k => (k in trveIdx ? trveIdx[k] : null)); // TRVE borné à la fenêtre
-      const compVals = months.map(k => (k in compIdx ? compIdx[k] : null)); // idem concurrents
+      const compVals = months.map(k => (k in compIdx ? compIdx[k] : null));
 
       const ctx = document.getElementById("chart").getContext("2d");
 
