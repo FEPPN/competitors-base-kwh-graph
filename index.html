@@ -17,10 +17,7 @@
 <body>
   <div class="chart-wrapper">
     <h1>Évolution du prix du kWh — TRVE vs Offres de marché</h1>
-    <div class="legend-note">
-      Profil particulier • Base 6 kVA • Unités : €/kWh <strong>TTC</strong><br>
-      Moyenne simple de 4 fournisseurs : Engie, TotalEnergies, OHM Énergie, Primeo Énergie.
-    </div>
+    <div class="legend-note">Profil particulier • Base 6 kVA • Unités : €/kWh <strong>TTC</strong></div>
     <canvas id="chart"></canvas>
   </div>
 
@@ -28,19 +25,32 @@
     const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json";
     const competitorsUrl = "https://raw.githubusercontent.com/feppn/competitors-base-kwh-graph/main/data_competitors_base.json";
 
+    // Fenêtre temporelle stricte demandée
+    const START_AT = "2024-07"; // Juillet 2024
+    const END_AT   = "2025-10"; // Octobre 2025
+
     const ymKey = d => { const dt=new Date(d); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0"); };
     const ymToLabel = k => { const [y,m]=k.split("-"); return new Date(+y,+m-1,1).toLocaleDateString("fr-FR",{year:"numeric",month:"2-digit"}); };
 
-    // Fenêtre temporelle demandée
-    const START_AT = "2024-07"; // YYYY-MM (juillet 2024)
-    const END_AT   = "2025-10"; // YYYY-MM (octobre 2025)
+    // Génère la liste continue des AAAA-MM entre START_AT et END_AT (inclus)
+    function monthRange(startYm, endYm){
+      const [sy, sm] = startYm.split("-").map(Number);
+      const [ey, em] = endYm.split("-").map(Number);
+      const res = [];
+      let y = sy, m = sm;
+      while (y < ey || (y === ey && m <= em)) {
+        res.push(y + "-" + String(m).padStart(2,"0"));
+        m++; if (m > 12) { m = 1; y++; }
+      }
+      return res;
+    }
 
     Promise.all([
       fetch(trveUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json()),
       fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json())
     ])
     .then(([trveRows, compRows])=>{
-      // TRVE: lire BASE si présent, sinon AVG (sécurité)
+      // Index TRVE: prendre BASE si dispo, sinon AVG
       const trveIdx = {};
       (trveRows||[])
         .filter(r => r.Date && (typeof r.BASE === "number" || typeof r.AVG === "number"))
@@ -49,20 +59,19 @@
           trveIdx[ymKey(r.Date)] = val;
         });
 
-      // Concurrents
+      // Index concurrents
       const compIdx = {};
       (compRows||[]).forEach(r=>{
         const v = (typeof r.CompetitorAVG==="number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",","."));
         if(!Number.isNaN(v) && r.Date) compIdx[ymKey(r.Date)] = v;
       });
 
-      // Union des mois, bornée à [START_AT, END_AT]
-      let months = Array.from(new Set([...Object.keys(trveIdx), ...Object.keys(compIdx)])).sort();
-      months = months.filter(k => k >= START_AT && k <= END_AT);
+      // On force les mois affichés = tous les mois de START_AT à END_AT
+      const months = monthRange(START_AT, END_AT);
 
       const labels   = months.map(ymToLabel);
-      const trveVals = months.map(k => (k in trveIdx ? trveIdx[k] : null));
-      const compVals = months.map(k => (k in compIdx ? compIdx[k] : null));
+      const trveVals = months.map(k => (k in trveIdx ? trveIdx[k] : null)); // TRVE borné à la fenêtre
+      const compVals = months.map(k => (k in compIdx ? compIdx[k] : null)); // idem concurrents
 
       const ctx = document.getElementById("chart").getContext("2d");
 
@@ -83,8 +92,8 @@
               borderWidth:1.6,
               pointRadius:0,
               spanGaps:true,
-              stepped:'before',   // ← courbe en escalier
-              tension:0,          // (ignoré quand stepped est actif)
+              stepped:'before',   // TRVE en escalier
+              tension:0,
               fill:false
             },
             {
@@ -126,7 +135,7 @@
           },
           scales:{
             y:{
-              min: 0.1, // ← démarre à 0,100 €
+              min: 0.1, // démarre à 0,100 €
               ticks:{
                 color:"#6b7280",
                 callback:v=>`${Number(v).toFixed(3).replace('.',',')} €`
