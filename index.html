@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>TRVE (Base) vs Prix moyen concurrents — Base 6 kVA</title>
+  <title>TRVE vs Offres de marché — Base 6 kVA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -16,40 +16,49 @@
 </head>
 <body>
   <div class="chart-wrapper">
-    <h1>Évolution du prix du kWh — TRVE (Base) vs Moyenne marché</h1>
-    <div class="legend-note">Profil particulier • Base 6 kVA • Unités : €/kWh <strong>TTC</strong></div>
+    <h1>Évolution du prix du kWh — TRVE vs Offres de marché</h1>
+    <div class="legend-note">
+      Profil particulier • Base 6 kVA • Unités : €/kWh <strong>TTC</strong><br>
+      Moyenne simple de 4 fournisseurs : Engie, TotalEnergies, OHM Énergie, Primeo Énergie.
+    </div>
     <canvas id="chart"></canvas>
   </div>
 
   <script>
-    const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json"; // BASE = AVG
+    const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json";
     const competitorsUrl = "https://raw.githubusercontent.com/feppn/competitors-base-kwh-graph/main/data_competitors_base.json";
 
     const ymKey = d => { const dt=new Date(d); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0"); };
     const ymToLabel = k => { const [y,m]=k.split("-"); return new Date(+y,+m-1,1).toLocaleDateString("fr-FR",{year:"numeric",month:"2-digit"}); };
+
+    // Fenêtre temporelle demandée
+    const START_AT = "2024-07"; // YYYY-MM (juillet 2024)
+    const END_AT   = "2025-10"; // YYYY-MM (octobre 2025)
 
     Promise.all([
       fetch(trveUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json()),
       fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json())
     ])
     .then(([trveRows, compRows])=>{
-      // TRVE: on prend uniquement AVG (BASE)
+      // TRVE: lire BASE si présent, sinon AVG (sécurité)
       const trveIdx = {};
       (trveRows||[])
-        .filter(r=>r.Date && typeof r.AVG==="number")
-        .forEach(r=>{ trveIdx[ymKey(r.Date)] = r.AVG; });
+        .filter(r => r.Date && (typeof r.BASE === "number" || typeof r.AVG === "number"))
+        .forEach(r => {
+          const val = (typeof r.BASE === "number") ? r.BASE : r.AVG;
+          trveIdx[ymKey(r.Date)] = val;
+        });
 
-      // Concurrents: tout le fichier (convertit string -> number si besoin)
+      // Concurrents
       const compIdx = {};
       (compRows||[]).forEach(r=>{
         const v = (typeof r.CompetitorAVG==="number") ? r.CompetitorAVG : Number(String(r.CompetitorAVG).replace(",","."));
         if(!Number.isNaN(v) && r.Date) compIdx[ymKey(r.Date)] = v;
       });
 
-      // Union des mois pour tout afficher puis filtre >= juillet 2024
+      // Union des mois, bornée à [START_AT, END_AT]
       let months = Array.from(new Set([...Object.keys(trveIdx), ...Object.keys(compIdx)])).sort();
-      const START_AT = "2024-01"; // YYYY-MM
-      months = months.filter(k => k >= START_AT);
+      months = months.filter(k => k >= START_AT && k <= END_AT);
 
       const labels   = months.map(ymToLabel);
       const trveVals = months.map(k => (k in trveIdx ? trveIdx[k] : null));
@@ -74,12 +83,12 @@
               borderWidth:1.6,
               pointRadius:0,
               spanGaps:true,
-              stepped:false,   // ← rend la courbe en escalier
-              tension:0.25,
+              stepped:'before',   // ← courbe en escalier
+              tension:0,          // (ignoré quand stepped est actif)
               fill:false
             },
             {
-              label:"Prix moyen marché (Engie / TotalEnergies / OHM Énergie / Primeo Énergie)",
+              label:"Prix moyen offres de marché (Engie • TotalEnergies • OHM Énergie • Primeo Énergie)",
               data: compVals,
               borderColor:"#334155",
               backgroundColor:"transparent",
@@ -107,13 +116,30 @@
               titleFont:{ weight:'700' }, bodyFont:{ weight:'500' },
               padding:10, cornerRadius:10,
               callbacks:{
-                label:(ctx)=>`${ctx.dataset.label} : ${typeof ctx.parsed.y==="number"?ctx.parsed.y.toFixed(4)+" € / kWh TTC":"—"}`
+                label:(ctx)=>{
+                  const y = ctx.parsed.y;
+                  if (typeof y !== "number") return `${ctx.dataset.label} : —`;
+                  return `${ctx.dataset.label} : ${y.toFixed(4).replace('.',',')} € / kWh TTC`;
+                }
               }
             }
           },
           scales:{
-            y:{ ticks:{ color:"#6b7280", callback:v=>`${Number(v).toFixed(3)} €` }, grid:{ color:"rgba(0,0,0,0.06)" }, border:{ display:false } },
-            x:{ offset:true, ticks:{ color:"#6b7280", maxRotation:0, autoSkip:true, maxTicksLimit:12 }, grid:{ display:false }, border:{ display:false } }
+            y:{
+              min: 0.1, // ← démarre à 0,100 €
+              ticks:{
+                color:"#6b7280",
+                callback:v=>`${Number(v).toFixed(3).replace('.',',')} €`
+              },
+              grid:{ color:"rgba(0,0,0,0.06)" },
+              border:{ display:false }
+            },
+            x:{
+              offset:true,
+              ticks:{ color:"#6b7280", maxRotation:0, autoSkip:true, maxTicksLimit:12 },
+              grid:{ display:false },
+              border:{ display:false }
+            }
           }
         }
       });
@@ -126,4 +152,3 @@
   </script>
 </body>
 </html>
-
