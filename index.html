@@ -22,7 +22,7 @@
   </div>
 
   <script>
-    const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json";
+    const trveUrl = "https://raw.githubusercontent.com/FEPPN/competitors-base-kwh-graph/main/data_TRVE_base.csv";
     // Nouvelle URL pointant vers le fichier CSV (format "raw")
     const competitorsUrl = "https://raw.githubusercontent.com/FEPPN/competitors-base-kwh-graph/main/data/data_competitors_base.csv";
 
@@ -49,7 +49,7 @@
       return res;
     }
 
-    // Fonction simple pour parser le CSV en tableau d'objets
+    // Fonction générique pour parser n'importe quel CSV en tableau d'objets
     function parseCSV(text) {
       const lines = text.trim().split('\n');
       if (lines.length < 2) return [];
@@ -58,38 +58,41 @@
       const delimiter = lines[0].includes(';') ? ';' : ',';
       const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
       
-      const dateIdx = headers.indexOf('Date');
-      const avgIdx = headers.indexOf('CompetitorAVG');
-      
       const result = [];
       for (let i = 1; i < lines.length; i++) {
         const rowText = lines[i].trim();
         if (!rowText) continue;
         
         const cols = rowText.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
-        if (dateIdx !== -1 && avgIdx !== -1) {
-          result.push({
-            Date: cols[dateIdx],
-            CompetitorAVG: cols[avgIdx]
-          });
-        }
+        const rowObj = {};
+        // Associe automatiquement chaque valeur à son nom de colonne
+        headers.forEach((h, idx) => {
+          rowObj[h] = cols[idx];
+        });
+        result.push(rowObj);
       }
       return result;
     }
 
     Promise.all([
-      fetch(trveUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json()),
-      // Le fichier des concurrents est désormais un CSV, on récupère le texte brut
+      // Les deux fichiers sont désormais des CSV, on récupère le texte brut
+      fetch(trveUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.text()),
       fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.text())
     ])
-    .then(([trveRows, compCsvText])=>{
-      // Conversion du texte CSV en structure objet
+    .then(([trveCsvText, compCsvText])=>{
+      // Conversion des textes CSV en structures objet
+      const trveRows = parseCSV(trveCsvText);
       const compRows = parseCSV(compCsvText);
 
       // --- TRVE : points ponctuels -> série mensuelle (carry-forward) ---
       const trvePoints = (trveRows || [])
-        .filter(r => r.Date && (typeof r.BASE === "number" || typeof r.AVG === "number"))
-        .map(r => [ymKey(r.Date), (typeof r.BASE === "number") ? r.BASE : r.AVG])
+        .filter(r => r.Date && (r.BASE !== undefined || r.AVG !== undefined))
+        .map(r => {
+          const rawVal = r.BASE !== undefined ? r.BASE : r.AVG;
+          const val = Number(String(rawVal).replace(",", "."));
+          return [ymKey(r.Date), val];
+        })
+        .filter(r => !Number.isNaN(r[1]))
         .sort((a,b) => a[0].localeCompare(b[0]));
 
       const months = monthRange(START_AT, END_AT);
