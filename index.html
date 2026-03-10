@@ -23,7 +23,8 @@
 
   <script>
     const trveUrl = "https://raw.githubusercontent.com/FEPPN/graph_historical_TRVE/main/data.json";
-    const competitorsUrl = "https://raw.githubusercontent.com/feppn/competitors-base-kwh-graph/main/data_competitors_base.json";
+    // Nouvelle URL pointant vers le fichier CSV (format "raw")
+    const competitorsUrl = "https://raw.githubusercontent.com/FEPPN/competitors-base-kwh-graph/main/data/data_competitors_base.csv";
 
     // Fenêtre temporelle stricte demandée
     const START_AT = "2024-07"; // Juillet 2024
@@ -45,11 +46,43 @@
       return res;
     }
 
+    // Fonction simple pour parser le CSV en tableau d'objets
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return [];
+      
+      // Détection du séparateur (, ou ;)
+      const delimiter = lines[0].includes(';') ? ';' : ',';
+      const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+      
+      const dateIdx = headers.indexOf('Date');
+      const avgIdx = headers.indexOf('CompetitorAVG');
+      
+      const result = [];
+      for (let i = 1; i < lines.length; i++) {
+        const rowText = lines[i].trim();
+        if (!rowText) continue;
+        
+        const cols = rowText.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+        if (dateIdx !== -1 && avgIdx !== -1) {
+          result.push({
+            Date: cols[dateIdx],
+            CompetitorAVG: cols[avgIdx]
+          });
+        }
+      }
+      return result;
+    }
+
     Promise.all([
       fetch(trveUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json()),
-      fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.json())
+      // Le fichier des concurrents est désormais un CSV, on récupère le texte brut
+      fetch(competitorsUrl+"?v="+Date.now(),{cache:"no-store"}).then(r=>r.text())
     ])
-    .then(([trveRows, compRows])=>{
+    .then(([trveRows, compCsvText])=>{
+      // Conversion du texte CSV en structure objet
+      const compRows = parseCSV(compCsvText);
+
       // --- TRVE : points ponctuels -> série mensuelle (carry-forward) ---
       const trvePoints = (trveRows || [])
         .filter(r => r.Date && (typeof r.BASE === "number" || typeof r.AVG === "number"))
