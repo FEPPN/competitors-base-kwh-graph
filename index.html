@@ -8,7 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
     body{margin:0;overflow:hidden;background:#fff;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;padding:40px 16px;}
-    .chart-wrapper{background:transparent;border-radius:0;box-shadow:none;padding:0;}
+    .chart-wrapper{background:transparent;border-radius:0;box-shadow:none;padding:0; width: 100%; max-width: 900px;}
     h1{margin:0 0 14px;text-align:center;font-size:22px;font-weight:600;color:#0b0f19;}
     .legend-note{margin:2px 0 12px;text-align:center;color:#64748b;font-size:13px;}
     canvas{width:100% !important;height:auto !important;}
@@ -22,12 +22,12 @@
   </div>
 
   <script>
-    const trveUrl = "https://raw.githubusercontent.com/FEPPN/competitors-base-kwh-graph/main/data_TRVE_base.csv";
-    // Nouvelle URL pointant vers le fichier CSV (format "raw")
+    // CORRECTION ICI : Ajout du dossier "/data/" dans l'URL
+    const trveUrl = "https://raw.githubusercontent.com/FEPPN/competitors-base-kwh-graph/main/data/data_TRVE_base.csv";
     const competitorsUrl = "https://raw.githubusercontent.com/FEPPN/competitors-base-kwh-graph/main/data/data_competitors_base.csv";
 
     // Fenêtre temporelle : de Juillet 2024 jusqu'au mois actuel
-    const START_AT = "2025-01"; // Juillet 2024
+    const START_AT = "2025-01"; // Juillet 2024 (Note : Le commentaire dit Juillet 2024 mais la valeur est 2025-01. Je laisse votre code tel quel)
     
     // Calcul dynamique du mois actuel pour la fin du graphique (AAAA-MM)
     const currentDate = new Date();
