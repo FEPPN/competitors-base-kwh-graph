@@ -86,12 +86,11 @@
 
       // --- TRVE : points ponctuels -> série mensuelle (carry-forward) ---
       const trvePoints = (trveRows || [])
-        .filter(r => r.Date && (r.BASE !== undefined || r.AVG !== undefined))
-        .map(r => {
-          const rawVal = r.BASE !== undefined ? r.BASE : r.AVG;
-          const val = Number(String(rawVal).replace(",", "."));
-          return [ymKey(r.Date), val];
-        })
+  .filter(r => r.DATE_DEBUT && r.BASE !== undefined)
+  .map(r => {
+    const val = Number(String(r.BASE).replace(",", "."));
+    return [ymKey(r.DATE_DEBUT), val];
+  })
         .filter(r => !Number.isNaN(r[1]))
         .sort((a,b) => a[0].localeCompare(b[0]));
 
